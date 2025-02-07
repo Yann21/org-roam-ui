@@ -67,13 +67,21 @@ const d3promise = import('d3-force-3d')
 
 // react-force-graph fails on import when server-rendered
 // https://github.com/vasturiano/react-force-graph/issues/155
-const ForceGraph2D = (
-  !!global.window ? require('react-force-graph').ForceGraph2D : null
-) as typeof TForceGraph2D
 
-const ForceGraph3D = (
-  !!global.window ? require('react-force-graph').ForceGraph3D : null
-) as typeof TForceGraph3D
+import dynamic from 'next/dynamic';
+
+// Import ForceGraph components dynamically (client-side only)
+const ForceGraph2D = dynamic(
+  () => import('react-force-graph').then((mod) => mod.ForceGraph2D),
+  { ssr: false }
+);
+
+const ForceGraph3D = dynamic(
+  () => import('react-force-graph').then((mod) => mod.ForceGraph3D),
+  { ssr: false }
+);
+
+
 
 export type NodeById = { [nodeId: string]: OrgRoamNode | undefined }
 export type LinksByNodeId = { [nodeId: string]: OrgRoamLink[] | undefined }
@@ -106,7 +114,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>ORUI</title>
+        <title>ORU BobI</title>
       </Head>
       <GraphPage />
     </>
@@ -117,6 +125,7 @@ export function GraphPage() {
   const [threeDim, setThreeDim] = usePersistantState('3d', false)
   const [tagColors, setTagColors] = usePersistantState<TagColors>('tagCols', {})
   const [scope, setScope] = useState<Scope>({ nodeIds: [], excludedNodeIds: [] })
+  const [filterAssosLinks, setFilterAssosLinks] = useState(false)
 
   const [physics, setPhysics] = usePersistantState('physics', initialPhysics)
   const [filter, setFilter] = usePersistantState('filter', initialFilter)
@@ -158,10 +167,20 @@ export function GraphPage() {
   const currentGraphDataRef = useRef<GraphData>({ nodes: [], links: [] })
 
   const updateGraphData = (orgRoamGraphData: OrgRoamGraphReponse) => {
+    console.log('DEBUG: Received Graph Data:', orgRoamGraphData)
+
     const oldNodeById = nodeByIdRef.current
     tagsRef.current = orgRoamGraphData.tags ?? []
     const importNodes = orgRoamGraphData.nodes ?? []
-    const importLinks = orgRoamGraphData.links ?? []
+
+    // Filter links to include only those with type "assos"
+    const importLinks = filterAssosLinks
+      ? (orgRoamGraphData.links ?? []).filter((link) => link.type === 'assos')
+      : (orgRoamGraphData.links ?? []).filter((link) => link.type === 'id')
+    // const importLinks = orgRoamGraphData.links ?? []
+
+    // console.log("DEBUG: Links received:", importLinks);
+
     const nodesByFile = importNodes.reduce<NodesByFile>((acc, node) => {
       return {
         ...acc,
@@ -560,6 +579,36 @@ export function GraphPage() {
     windowWidth,
   )
 
+  useEffect(() => {
+    if (!graphData) return
+
+    // Transform nodes into OrgRoamNode[]
+    const formattedNodes: OrgRoamNode[] = graphData.nodes.map((node) => ({
+      id: node.id as string,
+      file: (node as any).file ?? '',
+      title: (node as any).title ?? '',
+      level: (node as any).level ?? 0,
+      pos: (node as any).pos ?? 0,
+      olp: (node as any).olp ?? null,
+      properties: (node as any).properties ?? {},
+      tags: (node as any).tags ?? [],
+    }))
+
+    // Transform links into OrgRoamLink[]
+    const formattedLinks: OrgRoamLink[] = graphData.links.map((link) => ({
+      source: link.source as string,
+      target: link.target as string,
+      type: (link as any).type ?? 'unknown', // 👈 Default to "unknown" if missing
+    }))
+
+    updateGraphData({
+      ...graphData,
+      tags: tagsRef.current ?? [],
+      nodes: formattedNodes,
+      links: formattedLinks, // ✅ Ensuring correct type
+    })
+  }, [filterAssosLinks])
+
   return (
     <VariablesContext.Provider value={{ ...emacsVariables }}>
       <Box
@@ -640,6 +689,17 @@ export function GraphPage() {
                *   <Heading size="sm">{mainItem.title}</Heading>
                * </Flex> */}
               <Flex height="100%" flexDirection="row">
+                <Tooltip label={filterAssosLinks ? 'Show all links' : 'Show only assos links'}>
+                  <IconButton
+                    m={1}
+                    icon={<BiNetworkChart />}
+                    aria-label="Toggle Assos Filter"
+                    variant={filterAssosLinks ? 'solid' : 'outline'} // Highlights when active
+                    colorScheme={filterAssosLinks ? 'blue' : 'gray'} // Color feedback
+                    onClick={() => setFilterAssosLinks((prev) => !prev)}
+                  />
+                </Tooltip>
+
                 {scope.nodeIds.length > 0 && (
                   <Tooltip label="Return to main graph">
                     <IconButton

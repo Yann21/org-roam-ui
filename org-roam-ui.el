@@ -427,9 +427,6 @@ unchanged."
                                    links-with-empty-refs)))
          (nodes-db-rows (org-roam-ui--get-nodes))
          (fake-nodes (seq-map #'org-roam-ui--create-fake-node empty-refs))
-           ;; Try to update real nodes that are reference with a title build
-           ;; from their bibliography entry. Check configuration here for avoid
-           ;; unneeded iteration though nodes.
          (retitled-nodes-db-rows (if org-roam-ui-retitle-ref-nodes
                                     (seq-map #'org-roam-ui--retitle-node
                                              nodes-db-rows)
@@ -455,6 +452,7 @@ This database model won't be supported in the future, please consider upgrading.
     (websocket-send-text org-roam-ui-ws-socket (json-encode
                                                 `((type . "graphdata")
                                                   (data . ,response))))))
+
 
 
 (defun org-roam-ui--filter-citations (links)
@@ -491,7 +489,7 @@ were in the same table as the links)."
                  links:dest
                  links:type]
        :from links
-       :where (= links:type "id")])
+       :where (or (= links:type "id") (= links:type "assos"))])
   ;; Left outer join on refs means any id link (or cite link without a
   ;; corresponding node) will have 'nil for the `refs:node-id' value. Any
   ;; cite link where a node has that `:ROAM_REFS:' will have a value.
@@ -504,6 +502,7 @@ were in the same table as the links)."
      :left :outer :join refs :on (= links:dest refs:ref)
      :where (or
              (= links:type "id")
+             (= links:type "assos")
              (like links:type "%cite%"))])))
 
 (defun org-roam-ui--get-cites ()
