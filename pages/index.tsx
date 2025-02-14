@@ -68,20 +68,16 @@ const d3promise = import('d3-force-3d')
 // react-force-graph fails on import when server-rendered
 // https://github.com/vasturiano/react-force-graph/issues/155
 
-import dynamic from 'next/dynamic';
+import dynamic from 'next/dynamic'
 
 // Import ForceGraph components dynamically (client-side only)
-const ForceGraph2D = dynamic(
-  () => import('react-force-graph').then((mod) => mod.ForceGraph2D),
-  { ssr: false }
-);
+const ForceGraph2D = dynamic(() => import('react-force-graph').then((mod) => mod.ForceGraph2D), {
+  ssr: false,
+})
 
-const ForceGraph3D = dynamic(
-  () => import('react-force-graph').then((mod) => mod.ForceGraph3D),
-  { ssr: false }
-);
-
-
+const ForceGraph3D = dynamic(() => import('react-force-graph').then((mod) => mod.ForceGraph3D), {
+  ssr: false,
+})
 
 export type NodeById = { [nodeId: string]: OrgRoamNode | undefined }
 export type LinksByNodeId = { [nodeId: string]: OrgRoamLink[] | undefined }
@@ -1098,22 +1094,52 @@ export const Graph = function (props: GraphProps) {
   useEffect(() => {
     ;(async () => {
       const fg = graphRef.current
+      if (!fg || typeof fg.d3Force !== 'function') {
+        console.warn('Graph reference or d3Force function not available.')
+        return
+      }
       const d3 = await d3promise
+
+      // Gravity forces
       if (physics.gravityOn && !(scope.nodeIds.length && !physics.gravityLocal)) {
-        fg.d3Force('x', d3.forceX().strength(physics.gravity))
-        fg.d3Force('y', d3.forceY().strength(physics.gravity))
-        threeDim && fg.d3Force('z', d3.forceZ().strength(physics.gravity))
+        if (typeof fg.d3Force === 'function') {
+          fg.d3Force('x', d3.forceX().strength(physics.gravity))
+          fg.d3Force('y', d3.forceY().strength(physics.gravity))
+          if (threeDim) {
+            fg.d3Force('z', d3.forceZ().strength(physics.gravity))
+          }
+        }
       } else {
         fg.d3Force('x', null)
         fg.d3Force('y', null)
-        threeDim && fg.d3Force('z', null)
+        if (threeDim) {
+          fg.d3Force('z', null)
+        }
       }
-      physics.centering
-        ? fg.d3Force('center', d3.forceCenter().strength(physics.centeringStrength))
-        : fg.d3Force('center', null)
-      physics.linkStrength && fg.d3Force('link').strength(physics.linkStrength)
-      physics.linkIts && fg.d3Force('link').iterations(physics.linkIts)
-      physics.charge && fg.d3Force('charge').strength(physics.charge)
+
+      // Centering force
+      if (physics.centering) {
+        fg.d3Force('center', d3.forceCenter().strength(physics.centeringStrength))
+      } else {
+        fg.d3Force('center', null)
+      }
+
+      // Link force configuration
+      const linkForce = fg.d3Force('link')
+      if (physics.linkStrength && linkForce && typeof linkForce.strength === 'function') {
+        linkForce.strength(physics.linkStrength)
+      }
+      if (physics.linkIts && linkForce && typeof linkForce.iterations === 'function') {
+        linkForce.iterations(physics.linkIts)
+      }
+
+      // Charge force configuration
+      const chargeForce = fg.d3Force('charge')
+      if (physics.charge && chargeForce && typeof chargeForce.strength === 'function') {
+        chargeForce.strength(physics.charge)
+      }
+
+      // Collide force
       fg.d3Force(
         'collide',
         physics.collision ? d3.forceCollide().radius(physics.collisionStrength) : null,
@@ -1123,8 +1149,16 @@ export const Graph = function (props: GraphProps) {
 
   // Normally the graph doesn't update when you just change the physics parameters
   // This forces the graph to make a small update when you do
+  // useEffect(() => {
+  // graphRef.current?.d3ReheatSimulation()
+  // }, [physics, scope.nodeIds.length])
   useEffect(() => {
-    graphRef.current?.d3ReheatSimulation()
+    if (graphRef.current && typeof graphRef.current.d3ReheatSimulation === 'function') {
+      graphRef.current.d3ReheatSimulation()
+    } else {
+      // Optionally log a message or silently ignore
+      console.warn('d3ReheatSimulation is not available on graphRef.current')
+    }
   }, [physics, scope.nodeIds.length])
 
   // shitty handler to check for doubleClicks

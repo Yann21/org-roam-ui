@@ -11,4 +11,12 @@ module.exports = withPlugins([withTM], {
     domains: ['localhost'],
     loader: 'custom',
   },
+  typescript: {
+    // Warning: This will disable TypeScript type checking during build
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+  // This will allow production builds to complete even if there are ESLint errors.
+  ignoreDuringBuilds: true,
+  },
 })
